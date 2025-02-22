@@ -24,7 +24,7 @@ def setup_plot(x_max, title):
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.set_xlim(0, x_max)
     ax.set_ylim(-0.2, 1.2)
-    ax.set_xlabel("Time (seconds)")
+    ax.set_xlabel("")
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["False (503)", "True (200)"])
     ax.set_xticks(np.arange(0, x_max+1, 5))
@@ -197,7 +197,7 @@ def diagram_3_2():
     ax.annotate("k8s decides to kill the pod", xy=(28, 0), xytext=(25, -0.4),
                 arrowprops=dict(arrowstyle="->", color='red'))
     # Termination grace period of 60 sec: annotate forced kill at t=28+60=88 sec.
-    ax.annotate("k8s kills the pod", xy=(28, 0), xytext=(32, -0.6),
+    ax.annotate("Grace period starts", xy=(28, 0), xytext=(32, -0.6),
                 arrowprops=dict(arrowstyle="->", color='black'))
     plt.tight_layout()
     fig.savefig("diagrams/3.2-liveness.png")
