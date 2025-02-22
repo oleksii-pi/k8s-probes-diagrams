@@ -1,220 +1,220 @@
+# diagrams/probe_diagrams.py
+"""
+This script generates 7 diagrams (Startup, Readiness, and Liveness probes)
+to demonstrate how Kubernetes probes affect the lifespan of pods and traffic management.
+Each diagram is saved in the "diagrams" folder with the following naming convention:
+  - Startup Probes: 1.1-startup.png, 1.2-startup.png, 1.3-startup.png
+  - Readiness Probes: 2.1-readiness.png, 2.2-readiness.png
+  - Liveness Probes: 3.1-liveness.png, 3.2-liveness.png
+
+The X-axis represents time in seconds (marked every 5 sec),
+and the Y-axis represents probe outcome: 1 (True, OK/200) and 0 (False, Fail/503).
+Each probe request is shown as a filled circle (green for success, red for failure).
+Annotations indicate when Kubernetes makes decisions about the pod's status.
+"""
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Ensure diagrams folder exists
+# Ensure the diagrams folder exists
 os.makedirs("diagrams", exist_ok=True)
 
-def plot_diagram(time_points, responses, title, annotations, filename, x_max=None):
-    """
-    Plots a step diagram showing probe responses over time.
-    - time_points: array of times when probes are sent.
-    - responses: corresponding list of response values (0 for Fail, 1 for OK).
-    - title: title of the plot.
-    - annotations: list of dicts with keys 'time', 'text', and optional 'color'
-      used to draw vertical lines and text for key events.
-    - filename: output file name (saved under "diagrams").
-    - x_max: maximum x-axis value (if None, computed from time_points).
-    """
-    plt.figure(figsize=(10, 4))
-    # Plot as a step function (using 'post' to show the value after each probe time)
-    plt.step(time_points, responses, where='post', linewidth=2)
-    plt.ylim(-0.2, 1.2)
-    plt.yticks([0, 1], ['Fail (503)', 'OK (200)'])
-    if x_max is None:
-        x_max = time_points[-1] + 5
-    plt.xlim(0, x_max)
-    plt.xlabel("Time (seconds)")
-    plt.ylabel("Probe Response")
-    plt.title(title)
-    plt.xticks(np.arange(0, x_max+1, 5))
-    
-    # Draw vertical lines and add text annotations
-    for ann in annotations:
-        color = ann.get('color', 'red')
-        plt.axvline(x=ann['time'], color=color, linestyle='--')
-        plt.text(ann['time'] + 0.5, 1.05, ann['text'], rotation=90,
-                 verticalalignment='bottom', color=color)
-    plt.grid(True, which='both', linestyle='--', alpha=0.5)
-    plt.tight_layout()
-    plt.savefig(os.path.join("diagrams", filename))
-    plt.close()
+def setup_plot(x_max, title):
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.set_xlim(0, x_max)
+    ax.set_ylim(-0.2, 1.2)
+    ax.set_xlabel("Time (seconds)")
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["False (503)", "True (200)"])
+    ax.set_xticks(np.arange(0, x_max+1, 5))
+    ax.set_title(title)
+    return fig, ax
 
-# ------------------------------------------------------------------------------
+def plot_points(ax, times, statuses):
+    # Plot each probe as a circle: green if True, red if False.
+    for t, status in zip(times, statuses):
+        color = 'green' if status == 1 else 'red'
+        ax.scatter(t, status, color=color, s=100, zorder=3)
+
+# -----------------------------------------
 # 1. Startup Probe Configured
-# ------------------------------------------------------------------------------
+# -----------------------------------------
+# Common startup probe config:
+#   initialDelaySeconds: 5, periodSeconds: 2, failureThreshold: 30
 
-def startup_probe_1_1():
-    """
-    1.1. App starts in 3 seconds.
-         - Probes (startup probe with initialDelay=5, period=2) are sent at 5, 7, 9, …
-         - Since the app started at 3s, the first probe at 5s returns OK.
-    """
-    time_points = np.arange(5, 26, 2)  # simulate from 5 to 25 seconds
-    responses = [1] * len(time_points)  # all responses are OK (1)
-    annotations = [
-        {'time': 3, 'text': 'App Start (3s)', 'color': 'green'},
-        {'time': 5, 'text': 'k8s considers live', 'color': 'blue'}
-    ]
-    title = "Startup Probe - App starts at 3 seconds"
-    filename = "startup_probe_app_start_3.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=30)
+# 1.1: App starts at 3 seconds => always ready when probe starts.
+def diagram_1_1():
+    title = "Startup Probe 1.1: App starts at 3 sec (pod becomes live at first probe)"
+    # Probe times: start at 5 sec with period 2, let's show up to 15 sec.
+    times = np.arange(5, 15, 2)
+    # App started at 3 sec so every probe returns OK (True=1)
+    statuses = [1 for _ in times]
+    
+    fig, ax = setup_plot(15, title)
+    plot_points(ax, times, statuses)
+    # Annotate the first success as pod live
+    ax.annotate("Pod considered live", xy=(times[0], 1), xytext=(times[0]+1, 1.1),
+                arrowprops=dict(arrowstyle="->", color='blue'))
+    plt.tight_layout()
+    fig.savefig("diagrams/1.1-startup.png")
+    plt.close(fig)
 
-def startup_probe_1_2():
-    """
-    1.2. App starts in 8 seconds.
-         - Probes at t=5 and t=7 occur before the app is live (returns Fail, 0).
-         - At t=9 the app is live (since 8s < 9s), so probe returns OK.
-    """
-    time_points = np.arange(5, 26, 2)
-    responses = [0 if t < 9 else 1 for t in time_points]
-    annotations = [
-        {'time': 8, 'text': 'App Start (8s)', 'color': 'green'},
-        {'time': 9, 'text': 'k8s considers live', 'color': 'blue'}
-    ]
-    title = "Startup Probe - App starts at 8 seconds"
-    filename = "startup_probe_app_start_8.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=30)
+# 1.2: App starts at 8 seconds => initial probes fail until app is live.
+def diagram_1_2():
+    title = "Startup Probe 1.2: App starts at 8 sec (pod becomes live when probe succeeds)"
+    times = np.arange(5, 15, 2)  # probes at 5,7,9,11,13...
+    statuses = []
+    for t in times:
+        # if probe time is >= app start time (8 sec), then OK.
+        statuses.append(1 if t >= 8 else 0)
+    
+    fig, ax = setup_plot(15, title)
+    plot_points(ax, times, statuses)
+    # Annotate first success (at t=9 sec) as pod live.
+    success_time = next(t for t, s in zip(times, statuses) if s==1)
+    ax.annotate("Pod considered live", xy=(success_time, 1), xytext=(success_time+1, 1.1),
+                arrowprops=dict(arrowstyle="->", color='blue'))
+    plt.tight_layout()
+    fig.savefig("diagrams/1.2-startup.png")
+    plt.close(fig)
 
-def startup_probe_1_3():
-    """
-    1.3. App starts in 90 seconds.
-         - The probe continues to fail. With failureThreshold=30 (period=2),
-           the 30th consecutive failure occurs at t = 5 + 29*2 = 63 seconds.
-         - Although the app would start at 90s, k8s kills the pod at 63s.
-    """
-    time_points = np.arange(5, 70, 2)  # simulate up to ~70 seconds
-    responses = [0] * len(time_points)
-    annotations = [
-        {'time': 90, 'text': 'App Start (90s)', 'color': 'green'},
-        {'time': 63, 'text': 'k8s decides to kill pod', 'color': 'red'}
-    ]
-    title = "Startup Probe - App starts at 90 seconds (Pod Killed)"
-    filename = "startup_probe_app_start_90.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=75)
+# 1.3: App starts at 90 seconds => never becomes live within failure threshold.
+def diagram_1_3():
+    title = "Startup Probe 1.3: App starts at 90 sec (pod killed after threshold failures)"
+    # failureThreshold=30, so we have 30 consecutive failures.
+    num_failures = 30
+    times = np.arange(5, 5 + num_failures*2, 2)  # 5,7,9,... up to 63 sec
+    statuses = [0 for _ in times]
+    
+    fig, ax = setup_plot(times[-1] + 5, title)
+    plot_points(ax, times, statuses)
+    # Annotate at the time of last allowed failure
+    ax.annotate("k8s decides to kill pod", xy=(times[-1], 0), xytext=(times[-1]-10, -0.15),
+                arrowprops=dict(arrowstyle="->", color='black'))
+    plt.tight_layout()
+    fig.savefig("diagrams/1.3-startup.png")
+    plt.close(fig)
 
-# ------------------------------------------------------------------------------
-# 2. Startup Probe Not Configured – Using Readiness Probe Responses
-# ------------------------------------------------------------------------------
+# -----------------------------------------
+# 2. Readiness Probe Responses
+# -----------------------------------------
+# Readiness probe config:
+#   initialDelaySeconds: 5, periodSeconds: 2, failureThreshold: 5
 
-def readiness_probe_2_1():
-    """
-    2.1. Ready endpoint:
-         - Returns OK for 20 seconds, then 503 for 3 seconds, then OK for 5 seconds.
-         - With failureThreshold=5, the short failure (only two consecutive failures)
-           does not mark the pod as not ready.
-         - k8s considers the pod always ready (traffic continues to be sent).
-    """
-    time_points = np.arange(5, 36, 2)  # simulate from 5 to 35 seconds
-    responses = []
-    for t in time_points:
-        if 5 <= t < 25:
-            responses.append(1)
-        elif 25 <= t < 29:
-            responses.append(0)
+# 2.1: Ready endpoint returns OK for 10 sec, then 503 for 3 sec, then OK.
+def diagram_2_1():
+    title = "Readiness Probe 2.1: Temporary failure but pod remains ready"
+    # Let's show from 5 to 17 seconds.
+    times = np.arange(5, 18, 2)  # e.g., 5,7,9,11,13,15,17
+    statuses = []
+    for t in times:
+        # Endpoint behavior: OK for t < 10, Fail for 10 <= t < 13, OK for t >= 13.
+        if t < 10:
+            statuses.append(1)
+        elif 10 <= t < 13:
+            statuses.append(0)
         else:
-            responses.append(1)
-    annotations = [
-        {'time': 5, 'text': 'Readiness probe starts', 'color': 'purple'},
-        {'time': 25, 'text': 'Start Failures', 'color': 'red'},
-        {'time': 29, 'text': 'Recovery', 'color': 'blue'}
-    ]
-    title = "Readiness Probe - Transient Failures (Always Ready)"
-    filename = "readiness_probe_always_ready.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=40)
+            statuses.append(1)
+    
+    fig, ax = setup_plot(18, title)
+    plot_points(ax, times, statuses)
+    # Even with a transient failure, k8s still routes traffic.
+    ax.text(11, 0.5, "k8s considers pod always ready", color='purple')
+    plt.tight_layout()
+    fig.savefig("diagrams/2.1-readiness.png")
+    plt.close(fig)
 
-def readiness_probe_2_2():
-    """
-    2.2. Ready endpoint:
-         - Returns OK for 20 seconds, then 503 for 20 seconds, then OK for 5 seconds.
-         - With 5 consecutive failures (starting at t=25, at t=33 the threshold is met),
-           k8s marks the pod as not ready (stop sending traffic).
-         - When the endpoint returns OK again (at t=45), the pod is marked ready.
-    """
-    time_points = np.arange(5, 56, 2)  # simulate from 5 to 55 seconds
-    responses = []
-    for t in time_points:
-        if 5 <= t < 25:
-            responses.append(1)
-        elif 25 <= t < 45:
-            responses.append(0)
+# 2.2: Ready endpoint returns OK for 10 sec, then 503 for 20 sec, then OK.
+def diagram_2_2():
+    title = "Readiness Probe 2.2: Extended failure changes traffic routing"
+    # Let's simulate from 5 to 40 sec.
+    times = np.arange(5, 41, 2)  # probes at 5,7,9,...,39
+    statuses = []
+    for t in times:
+        # Endpoint: OK for t < 10, Fail for 10 <= t < 30, OK for t >= 30.
+        if t < 10:
+            statuses.append(1)
+        elif 10 <= t < 30:
+            statuses.append(0)
         else:
-            responses.append(1)
-    annotations = [
-        {'time': 5, 'text': 'Readiness probe starts', 'color': 'purple'},
-        {'time': 33, 'text': 'Marked Not Ready', 'color': 'red'},
-        {'time': 45, 'text': 'Ready Again', 'color': 'blue'}
-    ]
-    title = "Readiness Probe - Prolonged Failures (Not Ready then Ready)"
-    filename = "readiness_probe_not_ready.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=60)
+            statuses.append(1)
+    
+    fig, ax = setup_plot(40, title)
+    plot_points(ax, times, statuses)
+    # Readiness probe failureThreshold is 5.
+    # After 5 consecutive failures (starting at t=11, 13, 15, 17, 19), pod becomes not ready.
+    ax.annotate("k8s do not send traffic", xy=(19, 0), xytext=(19, -0.4),
+                arrowprops=dict(arrowstyle="->", color='red'))
+    # When a success is detected (at t=31), pod becomes ready again.
+    ax.annotate("k8s sends traffic", xy=(31, 1), xytext=(31, 1.3),
+                arrowprops=dict(arrowstyle="->", color='green'))
+    plt.tight_layout()
+    fig.savefig("diagrams/2.2-readiness.png")
+    plt.close(fig)
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------
 # 3. Liveness Probe Responses
-# ------------------------------------------------------------------------------
+# -----------------------------------------
+# Liveness probe config:
+#   initialDelaySeconds: 10, periodSeconds: 2, failureThreshold: 5, terminationGracePeriodSeconds: 60
 
-def liveness_probe_3_1():
-    """
-    3.1. Live endpoint:
-         - Returns OK for 20 seconds, then 503 for 5 seconds, then OK again.
-         - With failureThreshold=5, the brief failure (3 consecutive failures) does not
-           trigger a pod restart.
-         - k8s continues to consider the pod live.
-    """
-    time_points = np.arange(10, 41, 2)  # liveness probes start at 10 seconds
-    responses = []
-    for t in time_points:
-        if 10 <= t < 30:
-            responses.append(1)
-        elif 30 <= t < 35:
-            responses.append(0)
+# 3.1: Live endpoint returns OK for 20 sec, then 503 for 5 sec, then OK.
+def diagram_3_1():
+    title = "Liveness Probe 3.1: Brief failure; pod remains live"
+    # Probe times from 10 to 30 sec.
+    times = np.arange(10, 31, 2)  # 10,12,14,16,18,20,22,24,26,28,30
+    statuses = []
+    for t in times:
+        # Endpoint: OK for t < 20, Fail for 20 <= t < 25, OK for t >= 25.
+        if t < 20:
+            statuses.append(1)
+        elif 20 <= t < 25:
+            statuses.append(0)
         else:
-            responses.append(1)
-    annotations = [
-        {'time': 10, 'text': 'Liveness probe starts', 'color': 'purple'},
-        {'time': 30, 'text': 'Start transient failures', 'color': 'red'},
-        {'time': 35, 'text': 'Recovery', 'color': 'blue'}
-    ]
-    title = "Liveness Probe - Transient Failures (Always Live)"
-    filename = "liveness_probe_always_live.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=45)
+            statuses.append(1)
+    
+    fig, ax = setup_plot(32, title)
+    plot_points(ax, times, statuses)
+    ax.text(20, 0.5, "Transient failure, pod remains live", color='purple')
+    plt.tight_layout()
+    fig.savefig("diagrams/3.1-liveness.png")
+    plt.close(fig)
 
-def liveness_probe_3_2():
-    """
-    3.2. Live endpoint:
-         - Returns OK for 20 seconds, then 503 for 15 seconds.
-         - Probes (starting at t=10 with period=2) will see failures at t=30,32,34,36,38.
-         - With failureThreshold=5, at t=38 the pod is marked not live and a kill is initiated.
-         - With terminationGracePeriodSeconds=60, the pod is forcibly killed at t=38+60 = 98 seconds.
-    """
-    time_points = np.arange(10, 100, 2)  # simulate from 10 to 98+ seconds
-    responses = []
-    for t in time_points:
-        if 10 <= t < 30:
-            responses.append(1)
-        elif 30 <= t < 40:
-            responses.append(0)
-        else:
-            responses.append(1)  # after kill decision, state is moot
-    annotations = [
-        {'time': 10, 'text': 'Liveness probe starts', 'color': 'purple'},
-        {'time': 38, 'text': 'Marked Not Live & Kill Initiated', 'color': 'red'},
-        {'time': 98, 'text': 'Grace Period End (Forced Kill)', 'color': 'black'}
-    ]
-    title = "Liveness Probe - Prolonged Failures (Pod Killed)"
-    filename = "liveness_probe_kill.png"
-    plot_diagram(time_points, responses, title, annotations, filename, x_max=105)
+# 3.2: Live endpoint returns OK for 20 sec, then 503 continuously.
+def diagram_3_2():
+    title = "Liveness Probe 3.2: Extended failure leads to pod termination"
+    # Probe times from 10 to 35 sec.
+    times = np.arange(10, 36, 2)  # 10,12,14,16,18,20,22,24,26,28,30,32,34
+    statuses = []
+    for t in times:
+        # Endpoint: OK for t < 20, Fail for t >= 20.
+        statuses.append(1 if t < 20 else 0)
+    
+    fig, ax = setup_plot(40, title)
+    plot_points(ax, times, statuses)
+    # With failureThreshold=5, 5 consecutive failures occur at t=20,22,24,26,28.
+    ax.annotate("k8s decides to kill the pod", xy=(28, 0), xytext=(25, -0.4),
+                arrowprops=dict(arrowstyle="->", color='red'))
+    # Termination grace period of 60 sec: annotate forced kill at t=28+60=88 sec.
+    ax.annotate("k8s kills the pod", xy=(28, 0), xytext=(32, -0.6),
+                arrowprops=dict(arrowstyle="->", color='black'))
+    plt.tight_layout()
+    fig.savefig("diagrams/3.2-liveness.png")
+    plt.close(fig)
 
-# ------------------------------------------------------------------------------
-# Main – Generate all diagrams
-# ------------------------------------------------------------------------------
+# -----------------------------------------
+# Main: Generate all diagrams
+# -----------------------------------------
+def main():
+    diagram_1_1()
+    diagram_1_2()
+    diagram_1_3()
+    diagram_2_1()
+    diagram_2_2()
+    diagram_3_1()
+    diagram_3_2()
+    print("All diagrams have been saved in the 'diagrams' folder.")
 
 if __name__ == "__main__":
-    startup_probe_1_1()
-    startup_probe_1_2()
-    startup_probe_1_3()
-    readiness_probe_2_1()
-    readiness_probe_2_2()
-    liveness_probe_3_1()
-    liveness_probe_3_2()
-    print("Diagrams created in the 'diagrams' folder.")
+    main()

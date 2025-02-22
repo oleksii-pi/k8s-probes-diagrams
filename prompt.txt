@@ -1,32 +1,36 @@
+Act as senior startup software engineer.
 I want to demonstrate how Kubernetes probes affect the lifespan of pods and how they manage traffic.
 
-Please create diagrams using Python with the following specifications:
+Create diagrams using Python with the following specifications.
+It should be a single file with all the diagrams.
 
-- The X-axis should represent time in seconds, marking every 5 seconds, and show when Kubernetes probes are requested.
+- The X-axis should represent time in seconds, marking every 5 seconds, and show when Kubernetes probe is requested.
 - The Y-axis should have only two values: 0 (false) and 1 (true).
+Each call of the probe should be marked with a filled green (y=1) or red (y=0) circle.
 
 A response of OK=200 indicates true (success), while a response of Fail=503 indicates false (failure).
 
 For each use case, create one diagram for one probe and save it in the "diagrams" folder.
+File name format: 1.1-startup.png, 2.1-readiness.png, 3.1-liveness.png
 
 ### Technical Use Cases:
 
 1. **Startup Probe Configured (Startup Probe Responses)**
-   - 1.1. App starts in 3 seconds. Indicate when k8s considered it live.
-   - 1.2. App starts in 8 seconds. Indicate when k8s considered it live.
-   - 1.3. App starts in 90 seconds. Indicate when k8s considered it to kill.
+   - 1.1. App starts in 3 seconds. Indicate when k8s consider pod live.
+   - 1.2. App starts in 8 seconds. Indicate when k8s consider pod live.
+   - 1.3. App starts in 90 seconds. Indicate when k8s consider to kill pod.
 
 2. **Startup Probe Not Configured (Behavior After Start)**
 
    **Readiness Probe Responses**
-   - 2.1. Ready endpoint returns OK (200) for 20 seconds, then 503 for 3 seconds, then 200 for 5 seconds. Indicate that k8s considers it always ready.
-   - 2.2. Ready endpoint returns OK (200) for 20 seconds, then 503 for 20 seconds, then OK for 5 seconds. Indicate when k8s considered it not ready and do not send traffic, and when it considered as ready again.
+   - 2.1. Ready endpoint returns OK (200) for 10 seconds, then 503 for 3 seconds, then OK. Indicate that k8s considers it always ready.
+   - 2.2. Ready endpoint returns OK (200) for 10 seconds, then 503 for 20 seconds, then OK. Indicate when k8s considered it not ready (Label "k8s do not send traffic"), and when it considered as ready again (Label "k8s sends traffic").
 
-   **Liveness Probe Responses**
+   **Liveness Probe Responses**`
    - 3.1. Live endpoint returns OK (200) for 20 seconds, then 503 for 5 seconds, then again OK. Indicate that k8s considers it always live.
-   - 3.2. Live endpoint returns OK (200) for 20 seconds, then 503 for 15 seconds. Indicate when k8s considered it not live and decide to kill, and when grace period ends and pod is forced to be killed.
+   - 3.2. Live endpoint returns OK (200) for 20 seconds, then 503. Indicate when k8s considered it not live (Label "k8s decides to kill the pod"), and when grace period ends and pod is forced to be killed (Label "k8s kills the pod").
 
-Take into account 
+Take into account the following deployment configuration:
 
 # Startup Probe
 startupProbe:
