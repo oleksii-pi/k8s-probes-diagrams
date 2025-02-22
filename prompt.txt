@@ -1,0 +1,63 @@
+I want to demonstrate how Kubernetes probes affect the lifespan of pods and how they manage traffic.
+
+Please create diagrams using Python with the following specifications:
+
+- The X-axis should represent time in seconds, marking every 5 seconds, and show when Kubernetes probes are requested.
+- The Y-axis should have only two values: 0 (false) and 1 (true).
+
+A response of OK=200 indicates true (success), while a response of Fail=503 indicates false (failure).
+
+For each use case, create one diagram for one probe and save it in the "diagrams" folder.
+
+### Technical Use Cases:
+
+1. **Startup Probe Configured (Startup Probe Responses)**
+   - 1.1. App starts in 3 seconds. Indicate when k8s considered it live.
+   - 1.2. App starts in 8 seconds. Indicate when k8s considered it live.
+   - 1.3. App starts in 90 seconds. Indicate when k8s considered it to kill.
+
+2. **Startup Probe Not Configured (Behavior After Start)**
+
+   **Readiness Probe Responses**
+   - 2.1. Ready endpoint returns OK (200) for 20 seconds, then 503 for 3 seconds, then 200 for 5 seconds. Indicate that k8s considers it always ready.
+   - 2.2. Ready endpoint returns OK (200) for 20 seconds, then 503 for 20 seconds, then OK for 5 seconds. Indicate when k8s considered it not ready and do not send traffic, and when it considered as ready again.
+
+   **Liveness Probe Responses**
+   - 3.1. Live endpoint returns OK (200) for 20 seconds, then 503 for 5 seconds, then again OK. Indicate that k8s considers it always live.
+   - 3.2. Live endpoint returns OK (200) for 20 seconds, then 503 for 15 seconds. Indicate when k8s considered it not live and decide to kill, and when grace period ends and pod is forced to be killed.
+
+Take into account 
+
+# Startup Probe
+startupProbe:
+httpGet:
+path: /health/started
+port: 8080
+initialDelaySeconds: 5
+periodSeconds: 2
+failureThreshold: 30
+timeoutSeconds: 1
+successThreshold: 1
+
+# Readiness Probe
+readinessProbe:
+httpGet:
+path: /health/ready
+port: 8080
+initialDelaySeconds: 5
+periodSeconds: 2
+failureThreshold: 5
+timeoutSeconds: 1
+successThreshold: 1
+
+# Liveness Probe
+livenessProbe:
+httpGet:
+path: /health/live
+port: 8080
+initialDelaySeconds: 10
+periodSeconds: 2
+failureThreshold: 5
+timeoutSeconds: 1
+successThreshold: 1
+terminationGracePeriodSeconds: 60
